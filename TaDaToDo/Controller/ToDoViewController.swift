@@ -47,6 +47,7 @@ class ToDoViewController: UIViewController {
         let newItem = NSManagedObject(entity: entity, insertInto: managedContext)
         newItem.setValue(title, forKeyPath: "title")
         newItem.setValue("false", forKeyPath: "isRemoved")
+        newItem.setValue(false, forKey: "done")
         
         do {
             try managedContext.save()
@@ -70,7 +71,7 @@ class ToDoViewController: UIViewController {
         }
     }
     
-    func updateItem(textName: String) {
+    func updateItem(textName: String, operation: String, isDone: Bool = false) {
         guard let appDelegate = UIApplication.shared.delegate as? AppDelegate else {return}
         let managedContext = appDelegate.persistentContainer.viewContext
         let fetchRequest = NSFetchRequest<NSManagedObject>(entityName: "Item")
@@ -80,7 +81,12 @@ class ToDoViewController: UIViewController {
         do {
             let result = try managedContext.fetch(fetchRequest)
             let objectUpdate = result[0] as NSManagedObject
-            objectUpdate.setValue("true", forKey: "isRemoved")
+            
+            if operation == "remove" {
+                objectUpdate.setValue("true", forKey: "isRemoved")
+            } else if operation == "update" {
+                objectUpdate.setValue(isDone, forKey: "done")
+            }
             
             do {
                 try managedContext.save()
@@ -104,11 +110,25 @@ extension ToDoViewController: UITableViewDelegate, UITableViewDataSource {
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let item = itemsArray[indexPath.row]
         let cell = tableView.dequeueReusableCell(withIdentifier: "todoCell", for: indexPath) as! ToDoTableViewCell
-        cell.textLabel?.text = item.value(forKey: "title") as? String
+        cell.titleLabel.text = item.value(forKey: "title") as? String
+        if let doneStatus = item.value(forKey: "done") as? Bool {
+           cell.accessoryType = doneStatus ? .checkmark : .none
+        }
         return cell
     }
     
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        let item = itemsArray[indexPath.row]
+        guard let newItem = item.value(forKey: "title") as? String else { return }
+        if let cell = tableView.cellForRow(at: indexPath as IndexPath) {
+            if cell.accessoryType == .checkmark {
+                cell.accessoryType = .none
+                updateItem(textName: newItem, operation: "update", isDone: false)
+            } else {
+                cell.accessoryType = .checkmark
+                updateItem(textName: newItem, operation: "update", isDone: true)
+            }
+        }
         tableView.deselectRow(at: indexPath, animated: true)
     }
     
@@ -116,10 +136,33 @@ extension ToDoViewController: UITableViewDelegate, UITableViewDataSource {
         if editingStyle == .delete {
             let item = itemsArray[indexPath.row]
             guard let newItem = item.value(forKey: "title") as? String else { return }
-            updateItem(textName: newItem)
+            updateItem(textName: newItem, operation: "remove")
             fetchItems()
             todoTableView.reloadData()
+            showToast(message: "Item moved to Trash")
         }
+    }
+    
+}
+
+extension ToDoViewController {
+    
+    func showToast(message : String) {
+        let toastLabel = UILabel(frame: CGRect(x: self.view.frame.size.width/2 - 75, y: self.view.frame.size.height - 100, width: 150, height: 35))
+        toastLabel.backgroundColor = UIColor.black.withAlphaComponent(0.6)
+        toastLabel.textColor = UIColor.white
+        toastLabel.font = UIFont(name: "Arial", size: 15)!
+        toastLabel.textAlignment = .center;
+        toastLabel.text = message
+        toastLabel.alpha = 1.0
+        toastLabel.layer.cornerRadius = 10;
+        toastLabel.clipsToBounds  =  true
+        self.view.addSubview(toastLabel)
+        UIView.animate(withDuration: 4.0, delay: 0.1, options: .curveEaseOut, animations: {
+            toastLabel.alpha = 0.0
+        }, completion: {(isCompleted) in
+            toastLabel.removeFromSuperview()
+        })
     }
     
 }
